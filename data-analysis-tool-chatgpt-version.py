@@ -99,12 +99,10 @@ if 'performance_summary' not in st.session_state:
 # Function to authenticate and build Google Search Console service
 def authenticate_gsc():
     creds = None
-    # Load token if available
     if os.path.exists(TOKEN_FILE):
         with open(TOKEN_FILE, 'rb') as token:
             creds = pickle.load(token)
     
-    # Check validity of credentials
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             try:
@@ -113,20 +111,19 @@ def authenticate_gsc():
                 st.error(f"Error refreshing credentials: {str(e)}")
                 return False
         else:
-            # Make sure the credentials file exists
             if not os.path.exists(CREDENTIALS_FILE):
                 st.error("Credentials file not found! Please upload your Google API credentials.")
                 return False
             try:
                 with open(CREDENTIALS_FILE, 'r') as f:
                     client_config = json.load(f)
-                # Validate the expected keys
                 if 'web' not in client_config and 'installed' not in client_config:
-                    st.error("Invalid credentials format. Make sure your credentials are for a Desktop application.")
+                    st.error("Invalid credentials format. Please ensure your credentials are for a Desktop application.")
                     return False
             except Exception as e:
                 st.error(f"Error reading credentials file: {str(e)}")
                 return False
+            
             try:
                 flow = InstalledAppFlow.from_client_secrets_file(
                     CREDENTIALS_FILE, 
@@ -146,23 +143,23 @@ def authenticate_gsc():
                     creds = flow.credentials
                     with open(TOKEN_FILE, 'wb') as token:
                         pickle.dump(creds, token)
+                    st.session_state.authorized = True  # Ensure this is set
                     st.success("Authentication successful!")
+                    st.write("Session state:", st.session_state)  # Debug output
                 else:
                     st.info("Please complete the authorization steps above.")
                     return False
             except Exception as e:
                 st.error(f"Authentication failed: {str(e)}")
                 return False
-    
     try:
-        # Build the Google Search Console service
         service = build('searchconsole', 'v1', credentials=creds)
         st.session_state.gsc_service = service
-        st.session_state.authorized = True
         return True
     except Exception as e:
         st.error(f"Failed to build GSC service: {str(e)}")
         return False
+
 
 # Function to initialize the Gemini API with your API key
 def initialize_gemini(api_key):
