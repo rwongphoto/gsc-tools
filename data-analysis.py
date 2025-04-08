@@ -160,7 +160,7 @@ def initialize_gemini():
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel(
             # Using a slightly more common and capable model, adjust if needed
-            model_name="gemini-1.5-flash-latest",
+            model_name="gemini-1.5-flash",
             generation_config={
                 "temperature": 0.3, # Slightly higher for more variability if needed
                 "top_p": 0.95,
