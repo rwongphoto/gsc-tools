@@ -98,93 +98,40 @@ if 'performance_summary' not in st.session_state:
 
 # Replace your current authenticate_gsc function with this implementation
 def authenticate_gsc():
-    creds = None
-    # Check if token file exists
-    if os.path.exists(TOKEN_FILE):
-        with open(TOKEN_FILE, 'rb') as token:
-            creds = pickle.load(token)
-    
-    # If credentials don't exist or are invalid, let the user authenticate manually
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            try:
-                creds.refresh(Request())
-            except Exception as e:
-                st.error(f"Error refreshing credentials: {str(e)}")
-                return False
-        else:
-            if not os.path.exists(CREDENTIALS_FILE):
-                st.error("Credentials file not found! Please upload your Google API credentials.")
-                return False
-            
-            # Check credentials format
-            try:
-                with open(CREDENTIALS_FILE, 'r') as f:
-                    client_config = json.load(f)
-                
-                if 'web' not in client_config and 'installed' not in client_config:
-                    st.error("Invalid credentials format. Please make sure your credentials are for a 'Desktop application'.")
-                    return False
-            except Exception as e:
-                st.error(f"Error reading credentials file: {str(e)}")
-                return False
-            
-            # Use the manual auth flow instead of launching a browser
-            try:
-                # For Streamlit web app, use the auth URL approach
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    CREDENTIALS_FILE, 
-                    SCOPES,
-                    redirect_uri='urn:ietf:wg:oauth:2.0:oob'  # Use out-of-band auth flow
-                )
-                
-                # Generate authorization URL
-                auth_url, _ = flow.authorization_url(
-                    access_type='offline',
-                    include_granted_scopes='true'
-                )
-                
-                # Display instructions to the user
-                st.markdown("### Google Authentication Required")
-                st.markdown(f"1. Click the link below to authorize this application:")
-                st.markdown(f"2. [Click here to authorize]({auth_url})")
-                st.markdown("3. Sign in with your Google account")
-                st.markdown("4. Grant the requested permissions")
-                st.markdown("5. Copy the authorization code")
-                
-                # Get the authorization code from the user
-                auth_code = st.text_input("Enter the authorization code:", type="password")
-                
-                if auth_code:
-                    flow.fetch_token(code=auth_code)
-                    creds = flow.credentials
-                    
-                    # Save the credentials for future use
-                    with open(TOKEN_FILE, 'wb') as token:
-                        pickle.dump(creds, token)
-                    
-                    st.success("Authentication successful!")
-                else:
-                    st.info("Please complete the authorization steps above.")
-                    return False
-                
-            except Exception as e:
-                st.error(f"Authentication failed: {str(e)}")
-                return False
-    
-    # Build the service
     try:
-        service = build('searchconsole', 'v1', credentials=creds)
+        # Get credentials from Streamlit secrets
+        if "gcp_credentials" not in st.secrets:
+            st.error("GCP credentials not found in secrets!")
+            return False
+            
+        # Create credentials object from secrets
+        gcp_credentials = st.secrets["gcp_credentials"]
+        credentials_dict = dict(st.secrets["gcp_credentials"])
+        
+        # Create credentials object
+        credentials = service_account.Credentials.from_service_account_info(
+            credentials_dict,
+            scopes=SCOPES
+        )
+        
+        # Build the service
+        service = build('searchconsole', 'v1', credentials=credentials)
         st.session_state.gsc_service = service
         st.session_state.authorized = True
         return True
+        
     except Exception as e:
-        st.error(f"Failed to build service: {str(e)}")
+        st.error(f"Authentication failed: {str(e)}")
         return False
 
-# Function to initialize Gemini API
-def initialize_gemini(api_key):
+# Similarly update the Gemini API initialization
+def initialize_gemini():
     try:
+        if "gemini" not in st.secrets or "api_key" not in st.secrets["gemini"]:
+            st.error("Gemini API key not found in secrets!")
+            return False
+            
+        api_key = st.secrets["gemini"]["api_key"]
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel(
             model_name="models/gemini-2.5-pro",
@@ -198,6 +145,7 @@ def initialize_gemini(api_key):
         st.session_state.gemini_model = model
         st.session_state.gemini_initialized = True
         return True
+        
     except Exception as e:
         st.error(f"Failed to initialize Gemini API: {str(e)}")
         return False
@@ -430,23 +378,19 @@ def upload_token():
 # App UI
 st.markdown('<h1 class="main-header">SEO Performance Analyzer</h1>', unsafe_allow_html=True)
 
-# Sidebar for configuration
+# Modify the sidebar section
 with st.sidebar:
     st.markdown("## Configuration")
     
-    # Authentication section
-    st.markdown("### Authentication")
-    
     # GSC Authentication
+    st.markdown("### Google Search Console")
     if not st.session_state.authorized:
-        st.info("Please upload your Google Search Console API credentials to get started.")
-        if upload_credentials():
-            if st.button("Authenticate with Google Search Console"):
-                with st.spinner("Authenticating..."):
-                    if authenticate_gsc():
-                        st.success("Authentication successful!")
-                        # Get sites after authentication
-                        get_sites()
+        if st.button("Connect to Google Search Console"):
+            with st.spinner("Authenticating..."):
+                if authenticate_gsc():
+                    st.success("Authentication successful!")
+                    # Get sites after authentication
+                    get_sites()
     else:
         st.success("✅ Connected to Google Search Console")
         if st.button("Refresh Sites"):
@@ -454,15 +398,16 @@ with st.sidebar:
                 get_sites()
     
     # Gemini API Authentication
-    st.markdown("### Gemini API Setup")
-    gemini_api_key = st.text_input("Enter your Gemini API Key", type="password")
-    if gemini_api_key and not st.session_state.gemini_initialized:
+    st.markdown("### Gemini API")
+    if not st.session_state.gemini_initialized:
         if st.button("Initialize Gemini API"):
             with st.spinner("Initializing Gemini API..."):
-                if initialize_gemini(gemini_api_key):
+                if initialize_gemini():
                     st.success("Gemini API initialized successfully!")
-    elif st.session_state.gemini_initialized:
+    else:
         st.success("✅ Gemini API initialized")
+    
+    # Rest of your sidebar code for site selection and date range...
     
     # Site Selection
     if st.session_state.authorized and st.session_state.sites:
