@@ -96,7 +96,7 @@ if 'trend_analysis' not in st.session_state:
 if 'performance_summary' not in st.session_state:
     st.session_state.performance_summary = None
 
-# Function to authenticate GSC
+# Function to authenticate GSC - Fixed Version
 def authenticate_gsc():
     creds = None
     # Check if token file exists
@@ -113,8 +113,29 @@ def authenticate_gsc():
                 st.error("Credentials file not found! Please upload your Google API credentials.")
                 return False
             
-            flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
-            creds = flow.run_local_server(port=8501)
+            # First check if the credentials file has the correct format
+            try:
+                with open(CREDENTIALS_FILE, 'r') as f:
+                    client_config = json.load(f)
+                
+                # Verify the file has either a 'web' or 'installed' key
+                if 'web' not in client_config and 'installed' not in client_config:
+                    st.error("Invalid credentials format. Please make sure your credentials are for a 'Desktop application'.")
+                    return False
+            except json.JSONDecodeError:
+                st.error("Invalid JSON file. Please upload a valid credentials file.")
+                return False
+            except Exception as e:
+                st.error(f"Error reading credentials file: {str(e)}")
+                return False
+            
+            # Use port 0 to find an available port automatically
+            try:
+                flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
+                creds = flow.run_local_server(port=0)
+            except Exception as e:
+                st.error(f"Authentication failed: {str(e)}")
+                return False
         
         # Save the credentials for the next run
         with open(TOKEN_FILE, 'wb') as token:
@@ -323,21 +344,58 @@ def generate_trend_analysis(query_df, page_df, site_url):
         st.error(f"Failed to generate analysis with Gemini: {str(e)}")
         return None
 
-# Function to upload credentials
+# Function to upload credentials - Enhanced Version
 def upload_credentials():
     uploaded_file = st.file_uploader("Upload your Google API credentials JSON file", type="json")
+    use_existing_token = st.checkbox("Use existing token file (if available)")
+    
+    if use_existing_token and os.path.exists(TOKEN_FILE):
+        st.success("Using existing authentication token.")
+        return True
+    
     if uploaded_file is not None:
         try:
+            # Read and validate the file format before saving
+            content = uploaded_file.getvalue().decode('utf-8')
+            client_config = json.loads(content)
+            
+            # Check for correct format
+            if 'web' not in client_config and 'installed' not in client_config:
+                st.error("Invalid credentials format. Please make sure your credentials are for a 'Desktop application'.")
+                return False
+            
             # Save the uploaded file
             with open(CREDENTIALS_FILE, "wb") as f:
                 f.write(uploaded_file.getbuffer())
+            
             st.success("Credentials file uploaded successfully!")
             return True
+        except json.JSONDecodeError:
+            st.error("Invalid JSON file. Please upload a valid credentials file.")
+            return False
         except Exception as e:
             st.error(f"Error saving credentials: {str(e)}")
             return False
+    
     return False
-
+# Add this additional function to accept manual token upload
+def upload_token():
+    uploaded_token = st.file_uploader("Upload an existing token.pickle file", type=["pickle"])
+    
+    if uploaded_token is not None:
+        try:
+            # Save the uploaded token file
+            with open(TOKEN_FILE, "wb") as f:
+                f.write(uploaded_token.getbuffer())
+            
+            st.success("Token file uploaded successfully!")
+            return True
+        except Exception as e:
+            st.error(f"Error saving token: {str(e)}")
+            return False
+    
+    return False
+    
 # App UI
 st.markdown('<h1 class="main-header">SEO Performance Analyzer</h1>', unsafe_allow_html=True)
 
