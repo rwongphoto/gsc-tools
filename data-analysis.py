@@ -566,18 +566,32 @@ else:
             title="Clicks & Impressions Over Time",
             xaxis_title="Date",
             yaxis=dict(
-                title="Clicks",
-                titlefont=dict(color='#3B82F6'),
-                tickfont=dict(color='#3B82F6')
+                title=dict(                  # <--- Use title dictionary
+                    text="Clicks",           # <--- Set title text here
+                    font=dict(color='#3B82F6') # <--- Set font within title dict
+                ),
+                tickfont=dict(color='#3B82F6')  # Tick font remains the same
             ),
             yaxis2=dict(
-                title="Impressions",
-                titlefont=dict(color='#10B981'),
-                tickfont=dict(color='#10B981'),
+                title=dict(                  # <--- Use title dictionary
+                    text="Impressions",      # <--- Set title text here
+                    font=dict(color='#10B981') # <--- Set font within title dict
+                ),
+                tickfont=dict(color='#10B981'), # Tick font remains the same
                 anchor="x",
                 overlaying="y",
                 side="right"
             ),
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            ),
+            height=500,
+            hovermode="x unified"
+        )
             legend=dict(
                 orientation="h",
                 yanchor="bottom",
