@@ -16,7 +16,7 @@ import pickle
 import pytz
 from pathlib import Path
 
-# Set page config
+# Set Streamlit page configuration
 st.set_page_config(
     page_title="SEO Performance Analyzer",
     page_icon="📈",
@@ -24,7 +24,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS styling
+# Custom CSS styling for the app
 st.markdown("""
 <style>
     .main-header {
@@ -99,10 +99,12 @@ if 'performance_summary' not in st.session_state:
 # Function to authenticate and build Google Search Console service
 def authenticate_gsc():
     creds = None
+    # Load token if available
     if os.path.exists(TOKEN_FILE):
         with open(TOKEN_FILE, 'rb') as token:
             creds = pickle.load(token)
-
+    
+    # Check validity of credentials
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             try:
@@ -111,16 +113,16 @@ def authenticate_gsc():
                 st.error(f"Error refreshing credentials: {str(e)}")
                 return False
         else:
+            # Make sure the credentials file exists
             if not os.path.exists(CREDENTIALS_FILE):
                 st.error("Credentials file not found! Please upload your Google API credentials.")
                 return False
             try:
                 with open(CREDENTIALS_FILE, 'r') as f:
                     client_config = json.load(f)
-                
-                # Validate expected keys for Desktop application OAuth
+                # Validate the expected keys
                 if 'web' not in client_config and 'installed' not in client_config:
-                    st.error("Invalid credentials format. Please ensure your credentials are for a Desktop application.")
+                    st.error("Invalid credentials format. Make sure your credentials are for a Desktop application.")
                     return False
             except Exception as e:
                 st.error(f"Error reading credentials file: {str(e)}")
@@ -137,7 +139,7 @@ def authenticate_gsc():
                 )
                 st.markdown("### Google Authentication Required")
                 st.markdown(f"[Click here to authorize]({auth_url})")
-                st.markdown("Follow the instructions and copy the authorization code below.")
+                st.markdown("Follow the instructions to sign in and copy the authorization code below.")
                 auth_code = st.text_input("Enter the authorization code:", type="password")
                 if auth_code:
                     flow.fetch_token(code=auth_code)
@@ -151,8 +153,9 @@ def authenticate_gsc():
             except Exception as e:
                 st.error(f"Authentication failed: {str(e)}")
                 return False
-
+    
     try:
+        # Build the Google Search Console service
         service = build('searchconsole', 'v1', credentials=creds)
         st.session_state.gsc_service = service
         st.session_state.authorized = True
@@ -161,7 +164,7 @@ def authenticate_gsc():
         st.error(f"Failed to build GSC service: {str(e)}")
         return False
 
-# Function to initialize Gemini API
+# Function to initialize the Gemini API with your API key
 def initialize_gemini(api_key):
     try:
         genai.configure(api_key=api_key)
@@ -181,7 +184,7 @@ def initialize_gemini(api_key):
         st.error(f"Failed to initialize Gemini API: {str(e)}")
         return False
 
-# Function to fetch sites from Google Search Console
+# Function to fetch the list of sites from Google Search Console
 def get_sites():
     if not st.session_state.authorized:
         return []
@@ -197,7 +200,7 @@ def get_sites():
         st.error(f"Failed to fetch sites: {str(e)}")
         return []
 
-# Function to fetch query data
+# Function to fetch query data from Google Search Console
 def get_query_data(site_url, start_date, end_date, row_limit=5000):
     if not st.session_state.authorized:
         return None
@@ -225,13 +228,13 @@ def get_query_data(site_url, start_date, end_date, row_limit=5000):
             })
         df = pd.DataFrame(data)
         df['date'] = pd.to_datetime(df['date'])
-        df['ctr'] = df['ctr'] * 100  # Convert to percentage
+        df['ctr'] = df['ctr'] * 100  # Convert CTR to percentage
         return df
     except Exception as e:
         st.error(f"Failed to fetch query data: {str(e)}")
         return None
 
-# Function to fetch page data
+# Function to fetch page data from Google Search Console
 def get_page_data(site_url, start_date, end_date, row_limit=5000):
     if not st.session_state.authorized:
         return None
@@ -259,19 +262,19 @@ def get_page_data(site_url, start_date, end_date, row_limit=5000):
             })
         df = pd.DataFrame(data)
         df['date'] = pd.to_datetime(df['date'])
-        df['ctr'] = df['ctr'] * 100  # Convert to percentage
+        df['ctr'] = df['ctr'] * 100  # Convert CTR to percentage
         return df
     except Exception as e:
         st.error(f"Failed to fetch page data: {str(e)}")
         return None
 
-# Function to generate trend analysis and performance summary using Gemini
+# Function to generate trend analysis and performance summary using Gemini AI
 def generate_trend_analysis(query_df, page_df, site_url):
     if not st.session_state.gemini_initialized or not st.session_state.gemini_model:
         st.error("Gemini API not initialized!")
         return None
     try:
-        # Prepare query and page summaries
+        # Prepare summary data for queries and pages
         query_summary = query_df.groupby('query').agg({
             'clicks': 'sum',
             'impressions': 'sum',
@@ -284,14 +287,14 @@ def generate_trend_analysis(query_df, page_df, site_url):
             'position': 'mean'
         }).reset_index().sort_values('clicks', ascending=False).head(20)
         
-        # Prepare weekly trends
+        # Optional: prepare weekly trends if needed
         query_trends = query_df.groupby(['query', pd.Grouper(key='date', freq='W-MON')]).agg({
             'clicks': 'sum',
             'impressions': 'sum',
             'position': 'mean'
         }).reset_index()
-        
-        # Create prompt for analysis
+
+        # Create a prompt for Gemini AI
         prompt = f"""
 Analyze the following SEO data from Google Search Console for {site_url}:
 
@@ -308,11 +311,11 @@ Based on this data, provide a comprehensive SEO analysis including:
 4. Content recommendations based on search patterns
 5. Specific areas for improvement
 
-Format your response in clear sections with bullet points for easy readability.
+Format your response in clear sections with bullet points.
         """
         response = st.session_state.gemini_model.generate_content(prompt)
         
-        # Create prompt for performance summary
+        # Create a second prompt for a brief performance summary
         summary_prompt = f"""
 Based on the Google Search Console data for {site_url}, provide 5 key performance metrics and insights about:
 1. Overall search visibility trends
@@ -337,15 +340,17 @@ Format each insight as a brief bullet point (1-2 sentences max).
 def upload_credentials():
     uploaded_file = st.file_uploader("Upload your Google API credentials JSON file", type="json")
     use_existing_token = st.checkbox("Use existing token file (if available)")
+    
     if use_existing_token and os.path.exists(TOKEN_FILE):
         st.success("Using existing authentication token.")
         return True
+    
     if uploaded_file is not None:
         try:
             content = uploaded_file.getvalue().decode('utf-8')
             client_config = json.loads(content)
             if 'web' not in client_config and 'installed' not in client_config:
-                st.error("Invalid credentials format. Please ensure your credentials are for a Desktop application.")
+                st.error("Invalid credentials format. Ensure your credentials are for a Desktop application.")
                 return False
             with open(CREDENTIALS_FILE, "wb") as f:
                 f.write(uploaded_file.getbuffer())
@@ -373,17 +378,16 @@ def upload_token():
             return False
     return False
 
-# --------------------------
-# App UI and Sidebar Setup
-# --------------------------
-
+# ------------------------------------------------------------------------------
+# App UI and Sidebar Configuration
+# ------------------------------------------------------------------------------
 st.markdown('<h1 class="main-header">SEO Performance Analyzer</h1>', unsafe_allow_html=True)
 
 with st.sidebar:
     st.markdown("## Configuration")
     st.markdown("### Authentication")
     
-    # GSC Authentication
+    # Google Search Console Authentication
     if not st.session_state.authorized:
         st.info("Please upload your Google Search Console API credentials to begin.")
         if upload_credentials():
@@ -391,7 +395,7 @@ with st.sidebar:
                 with st.spinner("Authenticating..."):
                     if authenticate_gsc():
                         st.success("Authentication successful!")
-                        get_sites()
+                        get_sites()  # Load sites for selection
     else:
         st.success("✅ Connected to Google Search Console")
         if st.button("Refresh Sites"):
@@ -409,14 +413,14 @@ with st.sidebar:
     elif st.session_state.gemini_initialized:
         st.success("✅ Gemini API initialized")
     
-    # Site Selection
+    # Site selection dropdown (populated after sites are fetched)
     if st.session_state.authorized and st.session_state.sites:
         st.markdown("### Site Selection")
         selected_site = st.selectbox("Select a website", st.session_state.sites)
         if selected_site:
             st.session_state.selected_site = selected_site
 
-    # Date Range Selection
+    # Date range selection for fetching data
     if st.session_state.selected_site:
         st.markdown("### Date Range")
         date_options = {
@@ -467,9 +471,9 @@ with st.sidebar:
                             st.session_state.performance_summary = analysis['summary']
                             st.success("Analysis completed!")
 
-# --------------------------
+# ------------------------------------------------------------------------------
 # Main Content and Dashboard
-# --------------------------
+# ------------------------------------------------------------------------------
 if not st.session_state.authorized:
     st.info("Please authenticate with Google Search Console via the sidebar to begin.")
 elif not st.session_state.selected_site:
@@ -511,7 +515,7 @@ else:
         st.markdown('<div class="metric-label">Average Position</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
     
-    # Daily Metrics Aggregation and Charting
+    # Daily Metrics Aggregation and Charts
     daily_agg = query_df.groupby('date').agg({
         'clicks': 'sum',
         'impressions': 'sum',
@@ -583,8 +587,7 @@ else:
         )
         st.plotly_chart(fig, use_container_width=True)
     
-    # Top Queries and Top Pages Aggregations
-    # Top Queries: Compute weighted CTR from group data
+    # Top Queries and Pages Aggregation
     query_group = query_df.groupby('query').agg({
         'clicks': 'sum',
         'impressions': 'sum',
@@ -596,7 +599,6 @@ else:
     )
     top_queries = query_group.sort_values('clicks', ascending=False).head(10)
     
-    # Top Pages: Compute weighted CTR from group data
     page_group = page_df.groupby('page').agg({
         'clicks': 'sum',
         'impressions': 'sum',
@@ -641,7 +643,7 @@ else:
         fig.update_xaxes(tickangle=45)
         st.plotly_chart(fig, use_container_width=True)
     
-    # Gemini Analysis Section
+    # Gemini AI Analysis Section
     if st.session_state.gemini_initialized and st.session_state.trend_analysis:
         st.markdown('<h2 class="sub-header">Gemini AI Analysis</h2>', unsafe_allow_html=True)
         if st.session_state.performance_summary:
