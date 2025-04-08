@@ -159,20 +159,23 @@ def initialize_gemini():
         api_key = st.secrets["gemini"]["api_key"]
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel(
-            # Using a slightly more common and capable model, adjust if needed
-            model_name="gemini-1.5-flash",
+            # Use the more powerful gemini-1.5-pro-latest model
+            model_name="gemini-1.5-pro-latest", # <--- CORRECTED MODEL NAME (Alternative)
             generation_config={
-                "temperature": 0.3, # Slightly higher for more variability if needed
+                "temperature": 0.3,
                 "top_p": 0.95,
                 "top_k": 40,
                 "max_output_tokens": 8192,
             }
-            # Consider adding safety settings if dealing with sensitive content
             # safety_settings=[...]
         )
         st.session_state.gemini_model = model
         st.session_state.gemini_initialized = True
         return True
+
+    except Exception as e:
+        st.error(f"Failed to initialize Gemini API: {str(e)}")
+        return False
 
     except Exception as e:
         st.error(f"Failed to initialize Gemini API: {str(e)}")
