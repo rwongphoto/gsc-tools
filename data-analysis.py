@@ -96,7 +96,7 @@ if 'trend_analysis' not in st.session_state:
 if 'performance_summary' not in st.session_state:
     st.session_state.performance_summary = None
 
-# Function to authenticate GSC - Fixed Version
+# Replace your current authenticate_gsc function with this implementation
 def authenticate_gsc():
     creds = None
     # Check if token file exists
@@ -104,42 +104,73 @@ def authenticate_gsc():
         with open(TOKEN_FILE, 'rb') as token:
             creds = pickle.load(token)
     
-    # If credentials don't exist or are invalid, let the user log in
+    # If credentials don't exist or are invalid, let the user authenticate manually
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
+            try:
+                creds.refresh(Request())
+            except Exception as e:
+                st.error(f"Error refreshing credentials: {str(e)}")
+                return False
         else:
             if not os.path.exists(CREDENTIALS_FILE):
                 st.error("Credentials file not found! Please upload your Google API credentials.")
                 return False
             
-            # First check if the credentials file has the correct format
+            # Check credentials format
             try:
                 with open(CREDENTIALS_FILE, 'r') as f:
                     client_config = json.load(f)
                 
-                # Verify the file has either a 'web' or 'installed' key
                 if 'web' not in client_config and 'installed' not in client_config:
                     st.error("Invalid credentials format. Please make sure your credentials are for a 'Desktop application'.")
                     return False
-            except json.JSONDecodeError:
-                st.error("Invalid JSON file. Please upload a valid credentials file.")
-                return False
             except Exception as e:
                 st.error(f"Error reading credentials file: {str(e)}")
                 return False
             
-            # Use port 0 to find an available port automatically
+            # Use the manual auth flow instead of launching a browser
             try:
-                flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
-                creds = flow.run_local_server(port=0)
+                # For Streamlit web app, use the auth URL approach
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    CREDENTIALS_FILE, 
+                    SCOPES,
+                    redirect_uri='urn:ietf:wg:oauth:2.0:oob'  # Use out-of-band auth flow
+                )
+                
+                # Generate authorization URL
+                auth_url, _ = flow.authorization_url(
+                    access_type='offline',
+                    include_granted_scopes='true'
+                )
+                
+                # Display instructions to the user
+                st.markdown("### Google Authentication Required")
+                st.markdown(f"1. Click the link below to authorize this application:")
+                st.markdown(f"2. [Click here to authorize]({auth_url})")
+                st.markdown("3. Sign in with your Google account")
+                st.markdown("4. Grant the requested permissions")
+                st.markdown("5. Copy the authorization code")
+                
+                # Get the authorization code from the user
+                auth_code = st.text_input("Enter the authorization code:", type="password")
+                
+                if auth_code:
+                    flow.fetch_token(code=auth_code)
+                    creds = flow.credentials
+                    
+                    # Save the credentials for future use
+                    with open(TOKEN_FILE, 'wb') as token:
+                        pickle.dump(creds, token)
+                    
+                    st.success("Authentication successful!")
+                else:
+                    st.info("Please complete the authorization steps above.")
+                    return False
+                
             except Exception as e:
                 st.error(f"Authentication failed: {str(e)}")
                 return False
-        
-        # Save the credentials for the next run
-        with open(TOKEN_FILE, 'wb') as token:
-            pickle.dump(creds, token)
     
     # Build the service
     try:
@@ -148,7 +179,7 @@ def authenticate_gsc():
         st.session_state.authorized = True
         return True
     except Exception as e:
-        st.error(f"Failed to authenticate: {str(e)}")
+        st.error(f"Failed to build service: {str(e)}")
         return False
 
 # Function to initialize Gemini API
